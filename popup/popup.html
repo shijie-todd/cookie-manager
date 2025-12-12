@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cookie管理器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Cookie管理器</h1>
+      <label class="toggle-switch">
+        <input type="checkbox" id="pluginToggle" checked>
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <div class="content">
+      <!-- 配置列表 -->
+      <div class="profiles-section">
+        <div class="section-header">
+          <h2>配置列表</h2>
+          <button id="newProfileBtn" class="btn btn-primary">新建配置</button>
+        </div>
+        <div id="profilesList" class="profiles-list">
+          <!-- 配置项将通过JavaScript动态添加 -->
+        </div>
+      </div>
+
+      <!-- 新建配置对话框 -->
+      <div id="newProfileDialog" class="dialog" style="display: none;">
+        <div class="dialog-content">
+          <h3>新建配置</h3>
+          <div class="form-group">
+            <label for="profileName">配置名称：</label>
+            <input type="text" id="profileName" placeholder="请输入配置名称" maxlength="50">
+          </div>
+          <div class="dialog-actions">
+            <button id="cancelNewProfileBtn" class="btn btn-secondary">取消</button>
+            <button id="confirmNewProfileBtn" class="btn btn-primary">创建</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 域名管理对话框 -->
+      <div id="domainDialog" class="dialog" style="display: none;">
+        <div class="dialog-content">
+          <h3 id="domainDialogTitle">管理域名</h3>
+          <div class="form-group">
+            <label for="newDomain">添加域名：</label>
+            <div class="input-group">
+              <input type="text" id="newDomain" placeholder="例如: example.com">
+              <button id="addDomainBtn" class="btn btn-primary">添加</button>
+            </div>
+          </div>
+          <div class="domains-list" id="domainsList">
+            <!-- 域名列表将通过JavaScript动态添加 -->
+          </div>
+          <div class="dialog-actions">
+            <button id="closeDomainDialogBtn" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
+
