@@ -3,8 +3,12 @@
  * 监听Cookie变化、处理配置切换等
  */
 
-import { getActiveProfile, isPluginEnabled, switchProfile as switchProfileConfig } from '../utils/config-manager.js';
-import { saveCookieToActiveProfile, saveCurrentProfileCookies, clearAllCookies, loadCookies } from '../utils/cookie-manager.js';
+// 使用importScripts加载工具模块（Service Worker不支持ES6模块）
+importScripts(
+  '../utils/storage-sw.js',
+  '../utils/config-manager-sw.js',
+  '../utils/cookie-manager-sw.js'
+);
 
 // 标记是否正在切换配置，避免在切换过程中触发Cookie保存
 let isSwitchingProfile = false;
@@ -23,8 +27,8 @@ async function init() {
  * 设置Cookie拦截器
  */
 async function setupCookieInterceptor() {
-  const enabled = await isPluginEnabled();
-  const activeProfile = await getActiveProfile();
+  const enabled = await ConfigManager.isPluginEnabled();
+  const activeProfile = await ConfigManager.getActiveProfile();
   
   if (enabled && activeProfile) {
     // 监听Cookie变化
@@ -46,12 +50,12 @@ async function handleCookieChange(changeInfo) {
     return;
   }
   
-  const enabled = await isPluginEnabled();
+  const enabled = await ConfigManager.isPluginEnabled();
   if (!enabled) {
     return;
   }
   
-  const activeProfile = await getActiveProfile();
+  const activeProfile = await ConfigManager.getActiveProfile();
   if (!activeProfile) {
     return;
   }
@@ -63,7 +67,7 @@ async function handleCookieChange(changeInfo) {
   
   // 保存Cookie到当前激活配置
   try {
-    await saveCookieToActiveProfile(changeInfo.cookie);
+    await CookieManager.saveCookieToActiveProfile(changeInfo.cookie);
   } catch (error) {
     console.error('保存Cookie失败:', error);
   }
@@ -85,23 +89,23 @@ async function switchProfile(profileId, clearCookies = true) {
   
   try {
     // 1. 保存当前配置的Cookie
-    const currentProfile = await getActiveProfile();
+    const currentProfile = await ConfigManager.getActiveProfile();
     if (currentProfile) {
-      await saveCurrentProfileCookies();
+      await CookieManager.saveCurrentProfileCookies();
     }
     
     // 2. 切换配置
-    await switchProfileConfig(profileId);
+    await ConfigManager.switchProfile(profileId);
     
     // 3. 清空所有Cookie（如果需要）
     if (clearCookies) {
-      const newProfile = await getActiveProfile();
+      const newProfile = await ConfigManager.getActiveProfile();
       const excludeDomains = newProfile?.domains || [];
-      await clearAllCookies(excludeDomains);
+      await CookieManager.clearAllCookies(excludeDomains);
     }
     
     // 4. 加载新配置的Cookie
-    await loadCookies(profileId);
+    await CookieManager.loadCookies(profileId);
     
     console.log(`已切换到配置: ${profileId}`);
   } catch (error) {
@@ -123,17 +127,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
           
         case 'saveCurrentCookies':
-          await saveCurrentProfileCookies();
+          await CookieManager.saveCurrentProfileCookies();
           sendResponse({ success: true });
           break;
           
         case 'getActiveProfile':
-          const profile = await getActiveProfile();
+          const profile = await ConfigManager.getActiveProfile();
           sendResponse({ success: true, profile });
           break;
           
         case 'isPluginEnabled':
-          const enabled = await isPluginEnabled();
+          const enabled = await ConfigManager.isPluginEnabled();
           sendResponse({ success: true, enabled });
           break;
           

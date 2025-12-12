@@ -66,7 +66,7 @@ export async function setPluginEnabled(enabled) {
 export async function createProfile(name, domains = []) {
   const profiles = await getProfiles();
   const newProfile = {
-    id: `profile-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `profile-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
     name: name.trim(),
     domains: domains,
     enabled: true,
