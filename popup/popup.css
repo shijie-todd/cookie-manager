@@ -9,7 +9,7 @@ body {
   font-size: 14px;
   color: #333;
   background: #f5f5f5;
-  width: 400px;
+  width: 720px;
   min-height: 500px;
 }
 
@@ -142,6 +142,15 @@ input:checked + .slider:before {
   background: #da190b;
 }
 
+.btn-warning {
+  background: #ff9800;
+  color: white;
+}
+
+.btn-warning:hover {
+  background: #f57c00;
+}
+
 .profiles-list {
   display: flex;
   flex-direction: column;
@@ -155,7 +164,6 @@ input:checked + .slider:before {
   padding: 12px;
   border: 2px solid #e0e0e0;
   border-radius: 6px;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
@@ -167,6 +175,21 @@ input:checked + .slider:before {
 .profile-item.active {
   border-color: #4CAF50;
   background: #e8f5e9;
+}
+
+.profile-checkbox-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.profile-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .profile-info {
@@ -245,12 +268,35 @@ input:checked + .slider:before {
   color: #333;
 }
 
+.form-group label.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+  margin-bottom: 0;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.form-group label.checkbox-label input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
 .form-group input {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+}
+
+.form-group input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
 }
 
 .form-group input:focus {
@@ -298,5 +344,157 @@ input:checked + .slider:before {
 
 .domain-item .btn-icon {
   padding: 4px 8px;
+}
+
+/* Cookie详情对话框样式 */
+.cookie-dialog-content {
+  max-width: 900px;
+  max-height: 80vh;
+}
+
+.cookies-list {
+  max-height: 500px;
+  overflow-y: auto;
+  margin-top: 16px;
+}
+
+.cookie-domain-group {
+  margin-bottom: 24px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.cookie-domain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.cookie-domain-header strong {
+  font-size: 16px;
+  color: #333;
+}
+
+.cookie-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+  word-wrap: break-word;
+}
+
+.cookie-table thead {
+  background: #f5f5f5;
+}
+
+.cookie-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+  font-size: 12px;
+}
+
+.cookie-table th:nth-child(1),
+.cookie-table td:nth-child(1) {
+  width: 18%;
+}
+
+.cookie-table th:nth-child(2),
+.cookie-table td:nth-child(2) {
+  width: 32%;
+}
+
+.cookie-table th:nth-child(3),
+.cookie-table td:nth-child(3) {
+  width: 12%;
+}
+
+.cookie-table th:nth-child(4),
+.cookie-table td:nth-child(4) {
+  width: 13%;
+}
+
+.cookie-table th:nth-child(5),
+.cookie-table td:nth-child(5) {
+  width: 25%;
+  min-width: 140px;
+}
+
+.cookie-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cookie-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.cookie-table td {
+  padding: 8px 12px;
+  vertical-align: middle;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.cookie-name-cell {
+  font-weight: 600;
+  color: #333;
+  word-break: break-word;
+}
+
+.cookie-value-cell {
+  color: #666;
+  word-break: break-all;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cookie-path-cell {
+  color: #666;
+  font-size: 12px;
+}
+
+.cookie-flags-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cookie-flags-cell .cookie-flag {
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.cookie-flag {
+  background: #4CAF50;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.cookie-actions-cell {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.cookie-actions-cell .btn {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.cookie-actions-cell .btn-icon {
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 

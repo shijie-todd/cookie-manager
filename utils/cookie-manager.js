@@ -12,7 +12,7 @@ const STORAGE_KEY_COOKIE_DATA = 'cookieData';
  * 获取Cookie数据存储
  * @returns {Promise<object>} Cookie数据对象
  */
-async function getCookieData() {
+export async function getCookieData() {
   const data = await getStorage(STORAGE_KEY_COOKIE_DATA);
   return data[STORAGE_KEY_COOKIE_DATA] || {};
 }
@@ -27,9 +27,19 @@ async function saveCookieData(cookieData) {
 }
 
 /**
- * 判断域名是否匹配
+ * 获取指定配置的Cookie数据
+ * @param {string} profileId - 配置ID
+ * @returns {Promise<object>} Cookie数据对象，按域名组织
+ */
+export async function getProfileCookies(profileId) {
+  const cookieData = await getCookieData();
+  return cookieData[profileId] || {};
+}
+
+/**
+ * 判断域名是否匹配（支持通配符）
  * @param {string} cookieDomain - Cookie的域名
- * @param {string} targetDomain - 目标域名
+ * @param {string} targetDomain - 目标域名（支持通配符，如 *.wps.com）
  * @returns {boolean} 是否匹配
  */
 function isDomainMatch(cookieDomain, targetDomain) {
@@ -37,7 +47,7 @@ function isDomainMatch(cookieDomain, targetDomain) {
   const normalizedCookieDomain = cookieDomain.startsWith('.') 
     ? cookieDomain.substring(1) 
     : cookieDomain;
-  const normalizedTargetDomain = targetDomain.startsWith('.')
+  let normalizedTargetDomain = targetDomain.startsWith('.')
     ? targetDomain.substring(1)
     : targetDomain;
   
@@ -51,18 +61,34 @@ function isDomainMatch(cookieDomain, targetDomain) {
     return true;
   }
   
+  // 通配符匹配：支持 *.example.com 格式
+  if (normalizedTargetDomain.startsWith('*.')) {
+    const baseDomain = normalizedTargetDomain.substring(2); // 去掉 "*."
+    
+    // 精确匹配基础域名
+    if (normalizedCookieDomain === baseDomain) {
+      return true;
+    }
+    
+    // 匹配所有子域名：*.example.com 匹配 a.example.com, b.example.com 等
+    if (normalizedCookieDomain.endsWith('.' + baseDomain)) {
+      return true;
+    }
+  }
+  
   return false;
 }
 
 /**
  * 检查Cookie是否属于配置的域名列表
  * @param {object} cookie - Cookie对象
- * @param {string[]} domains - 域名列表
+ * @param {string[]} domains - 域名列表（如果为空或未配置，则对所有域名生效）
  * @returns {boolean} 是否匹配
  */
 function isCookieInDomains(cookie, domains) {
+  // 如果没有配置域名，则对所有域名生效
   if (!domains || domains.length === 0) {
-    return false;
+    return true;
   }
   
   return domains.some(domain => isDomainMatch(cookie.domain, domain));
@@ -113,13 +139,98 @@ export async function saveCookies(profileId, domain) {
  */
 export async function saveCurrentProfileCookies() {
   const activeProfile = await getActiveProfile();
-  if (!activeProfile || !activeProfile.domains || activeProfile.domains.length === 0) {
+  if (!activeProfile) {
+    return;
+  }
+  
+  // 如果没有配置域名，保存所有Cookie
+  if (!activeProfile.domains || activeProfile.domains.length === 0) {
+    try {
+      const allCookies = await chrome.cookies.getAll({});
+      const cookieData = await getCookieData();
+      
+      if (!cookieData[activeProfile.id]) {
+        cookieData[activeProfile.id] = {};
+      }
+      
+      // 按域名分组保存Cookie
+      const cookiesByDomain = {};
+      for (const cookie of allCookies) {
+        const domain = cookie.domain.startsWith('.') 
+          ? cookie.domain.substring(1) 
+          : cookie.domain;
+        if (!cookiesByDomain[domain]) {
+          cookiesByDomain[domain] = [];
+        }
+        cookiesByDomain[domain].push({
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain,
+          path: cookie.path,
+          secure: cookie.secure,
+          httpOnly: cookie.httpOnly,
+          sameSite: cookie.sameSite,
+          expirationDate: cookie.expirationDate,
+          storeId: cookie.storeId
+        });
+      }
+      
+      cookieData[activeProfile.id] = cookiesByDomain;
+      await saveCookieData(cookieData);
+    } catch (error) {
+      console.error('保存所有Cookie失败:', error);
+      throw error;
+    }
     return;
   }
   
   // 为每个域名保存Cookie
   for (const domain of activeProfile.domains) {
-    await saveCookies(activeProfile.id, domain);
+    // 如果是通配符域名（如 *.example.com），需要获取所有匹配的Cookie
+    if (domain.startsWith('*.')) {
+      const baseDomain = domain.substring(2);
+      try {
+        // 获取基础域名及其所有子域名的Cookie
+        const allCookies = await chrome.cookies.getAll({});
+        const matchedCookies = allCookies.filter(cookie => {
+          const cookieDomain = cookie.domain.startsWith('.') 
+            ? cookie.domain.substring(1) 
+            : cookie.domain;
+          return cookieDomain === baseDomain || cookieDomain.endsWith('.' + baseDomain);
+        });
+        
+        const cookieData = await getCookieData();
+        if (!cookieData[activeProfile.id]) {
+          cookieData[activeProfile.id] = {};
+        }
+        
+        // 按实际域名分组保存
+        for (const cookie of matchedCookies) {
+          const cookieDomain = cookie.domain.startsWith('.') 
+            ? cookie.domain.substring(1) 
+            : cookie.domain;
+          if (!cookieData[activeProfile.id][cookieDomain]) {
+            cookieData[activeProfile.id][cookieDomain] = [];
+          }
+          cookieData[activeProfile.id][cookieDomain].push({
+            name: cookie.name,
+            value: cookie.value,
+            domain: cookie.domain,
+            path: cookie.path,
+            secure: cookie.secure,
+            httpOnly: cookie.httpOnly,
+            sameSite: cookie.sameSite,
+            expirationDate: cookie.expirationDate,
+            storeId: cookie.storeId
+          });
+        }
+        await saveCookieData(cookieData);
+      } catch (error) {
+        console.error(`保存通配符域名 ${domain} 的Cookie失败:`, error);
+      }
+    } else {
+      await saveCookies(activeProfile.id, domain);
+    }
   }
 }
 
@@ -231,31 +342,27 @@ export async function saveCookieToActiveProfile(cookie) {
     return;
   }
   
-  // 检查Cookie是否属于配置的域名列表
+  // 检查Cookie是否属于配置的域名列表（如果没有配置域名，则对所有域名生效）
   if (!isCookieInDomains(cookie, activeProfile.domains)) {
     return;
   }
   
-  // 确定Cookie所属的域名（从配置的域名列表中找到匹配的）
-  const matchedDomain = activeProfile.domains.find(domain => 
-    isDomainMatch(cookie.domain, domain)
-  );
-  
-  if (!matchedDomain) {
-    return;
-  }
+  // 获取Cookie的实际域名（用作存储key）
+  const cookieDomain = cookie.domain.startsWith('.') 
+    ? cookie.domain.substring(1) 
+    : cookie.domain;
   
   // 获取当前Cookie数据
   const cookieData = await getCookieData();
   if (!cookieData[activeProfile.id]) {
     cookieData[activeProfile.id] = {};
   }
-  if (!cookieData[activeProfile.id][matchedDomain]) {
-    cookieData[activeProfile.id][matchedDomain] = [];
+  if (!cookieData[activeProfile.id][cookieDomain]) {
+    cookieData[activeProfile.id][cookieDomain] = [];
   }
   
   // 检查是否已存在同名Cookie，如果存在则更新，否则添加
-  const existingIndex = cookieData[activeProfile.id][matchedDomain].findIndex(
+  const existingIndex = cookieData[activeProfile.id][cookieDomain].findIndex(
     c => c.name === cookie.name && c.path === cookie.path
   );
   
@@ -272,11 +379,102 @@ export async function saveCookieToActiveProfile(cookie) {
   };
   
   if (existingIndex >= 0) {
-    cookieData[activeProfile.id][matchedDomain][existingIndex] = cookieToSave;
+    cookieData[activeProfile.id][cookieDomain][existingIndex] = cookieToSave;
   } else {
-    cookieData[activeProfile.id][matchedDomain].push(cookieToSave);
+    cookieData[activeProfile.id][cookieDomain].push(cookieToSave);
   }
   
   await saveCookieData(cookieData);
 }
 
+/**
+ * 更新配置中的Cookie
+ * @param {string} profileId - 配置ID
+ * @param {string} domain - 域名
+ * @param {string} cookieName - Cookie名称
+ * @param {string} cookiePath - Cookie路径
+ * @param {object} updates - 要更新的字段
+ * @returns {Promise<void>}
+ */
+export async function updateCookie(profileId, domain, cookieName, cookiePath, updates) {
+  const cookieData = await getCookieData();
+  if (!cookieData[profileId] || !cookieData[profileId][domain]) {
+    throw new Error('Cookie不存在');
+  }
+  
+  const cookies = cookieData[profileId][domain];
+  const index = cookies.findIndex(c => c.name === cookieName && c.path === cookiePath);
+  
+  if (index === -1) {
+    throw new Error('Cookie不存在');
+  }
+  
+  cookies[index] = { ...cookies[index], ...updates };
+  await saveCookieData(cookieData);
+}
+
+/**
+ * 删除配置中的Cookie
+ * @param {string} profileId - 配置ID
+ * @param {string} domain - 域名
+ * @param {string} cookieName - Cookie名称
+ * @param {string} cookiePath - Cookie路径
+ * @returns {Promise<void>}
+ */
+export async function deleteCookie(profileId, domain, cookieName, cookiePath) {
+  const cookieData = await getCookieData();
+  if (!cookieData[profileId] || !cookieData[profileId][domain]) {
+    throw new Error('Cookie不存在');
+  }
+  
+  const cookies = cookieData[profileId][domain];
+  const filtered = cookies.filter(c => !(c.name === cookieName && c.path === cookiePath));
+  
+  if (filtered.length === 0) {
+    delete cookieData[profileId][domain];
+  } else {
+    cookieData[profileId][domain] = filtered;
+  }
+  
+  await saveCookieData(cookieData);
+}
+
+/**
+ * 添加Cookie到配置
+ * @param {string} profileId - 配置ID
+ * @param {string} domain - 域名
+ * @param {object} cookie - Cookie对象
+ * @returns {Promise<void>}
+ */
+export async function addCookie(profileId, domain, cookie) {
+  const cookieData = await getCookieData();
+  if (!cookieData[profileId]) {
+    cookieData[profileId] = {};
+  }
+  if (!cookieData[profileId][domain]) {
+    cookieData[profileId][domain] = [];
+  }
+  
+  // 检查是否已存在
+  const existingIndex = cookieData[profileId][domain].findIndex(
+    c => c.name === cookie.name && c.path === cookie.path
+  );
+  
+  if (existingIndex >= 0) {
+    throw new Error('Cookie已存在');
+  }
+  
+  cookieData[profileId][domain].push({
+    name: cookie.name,
+    value: cookie.value || '',
+    domain: cookie.domain || domain,
+    path: cookie.path || '/',
+    secure: cookie.secure || false,
+    httpOnly: cookie.httpOnly || false,
+    sameSite: cookie.sameSite || 'no_restriction',
+    expirationDate: cookie.expirationDate,
+    storeId: cookie.storeId
+  });
+  
+  await saveCookieData(cookieData);
+}

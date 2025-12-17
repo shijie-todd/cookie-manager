@@ -48,9 +48,9 @@
         <div class="dialog-content">
           <h3 id="domainDialogTitle">管理域名</h3>
           <div class="form-group">
-            <label for="newDomain">添加域名：</label>
+            <label for="newDomain">添加域名（可选，留空则对所有域名生效）：</label>
             <div class="input-group">
-              <input type="text" id="newDomain" placeholder="例如: example.com">
+              <input type="text" id="newDomain" placeholder="例如: example.com 或 *.wps.com">
               <button id="addDomainBtn" class="btn btn-primary">添加</button>
             </div>
           </div>
@@ -59,6 +59,89 @@
           </div>
           <div class="dialog-actions">
             <button id="closeDomainDialogBtn" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cookie详情对话框 -->
+      <div id="cookieDialog" class="dialog" style="display: none;">
+        <div class="dialog-content cookie-dialog-content">
+          <h3 id="cookieDialogTitle">Cookie详情</h3>
+          <div class="cookies-list" id="cookiesList">
+            <!-- Cookie列表将通过JavaScript动态添加 -->
+          </div>
+          <div class="dialog-actions">
+            <button id="closeCookieDialogBtn" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 添加Cookie对话框 -->
+      <div id="addCookieDialog" class="dialog" style="display: none;">
+        <div class="dialog-content">
+          <h3>添加Cookie</h3>
+          <div class="form-group">
+            <label for="cookieName">名称：</label>
+            <input type="text" id="cookieName" placeholder="Cookie名称" required>
+          </div>
+          <div class="form-group">
+            <label for="cookieValue">值：</label>
+            <input type="text" id="cookieValue" placeholder="Cookie值">
+          </div>
+          <div class="form-group">
+            <label for="cookieDomain">域名：</label>
+            <input type="text" id="cookieDomain" placeholder="域名">
+          </div>
+          <div class="form-group">
+            <label for="cookiePath">路径：</label>
+            <input type="text" id="cookiePath" placeholder="/" value="/">
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cookieSecure"> Secure
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="cookieHttpOnly"> HttpOnly
+            </label>
+          </div>
+          <div class="dialog-actions">
+            <button id="cancelAddCookieBtn" class="btn btn-secondary">取消</button>
+            <button id="confirmAddCookieBtn" class="btn btn-primary">添加</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 编辑Cookie对话框 -->
+      <div id="editCookieDialog" class="dialog" style="display: none;">
+        <div class="dialog-content">
+          <h3>编辑Cookie</h3>
+          <div class="form-group">
+            <label for="editCookieName">名称：</label>
+            <input type="text" id="editCookieName" placeholder="Cookie名称" required>
+          </div>
+          <div class="form-group">
+            <label for="editCookieValue">值：</label>
+            <input type="text" id="editCookieValue" placeholder="Cookie值">
+          </div>
+          <div class="form-group">
+            <label for="editCookieDomain">域名：</label>
+            <input type="text" id="editCookieDomain" placeholder="域名">
+          </div>
+          <div class="form-group">
+            <label for="editCookiePath">路径：</label>
+            <input type="text" id="editCookiePath" placeholder="/" value="/">
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="editCookieSecure"> Secure
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="editCookieHttpOnly"> HttpOnly
+            </label>
+          </div>
+          <div class="dialog-actions">
+            <button id="cancelEditCookieBtn" class="btn btn-secondary">取消</button>
+            <button id="confirmEditCookieBtn" class="btn btn-primary">保存</button>
           </div>
         </div>
       </div>

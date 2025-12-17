@@ -12,6 +12,8 @@ import {
   setPluginEnabled,
   updateProfile
 } from '../utils/config-manager.js';
+import { getProfileCookies, updateCookie, deleteCookie, addCookie, clearProfileCookies, clearAllCookies } from '../utils/cookie-manager.js';
+import { setStorage } from '../utils/storage.js';
 
 let currentProfileId = null;
 let profiles = [];
@@ -56,34 +58,37 @@ function renderProfiles() {
     
     return `
       <div class="profile-item ${isActive ? 'active' : ''}" data-profile-id="${profile.id}">
-        <div class="profile-info">
-          <div class="profile-name">${escapeHtml(profile.name)}</div>
-          <div class="profile-meta">${domainCount} 个域名${isActive ? ' · 当前激活' : ''}</div>
-        </div>
+        <label class="profile-checkbox-label">
+          <input type="checkbox" class="profile-checkbox" data-profile-id="${profile.id}" ${isActive ? 'checked' : ''}>
+          <div class="profile-info">
+            <div class="profile-name">${escapeHtml(profile.name)}</div>
+            <div class="profile-meta">${domainCount > 0 ? domainCount + ' 个域名' : '所有域名'}</div>
+          </div>
+        </label>
         <div class="profile-actions">
-          <button class="btn btn-icon btn-secondary manage-domains-btn" data-profile-id="${profile.id}">域名</button>
-          ${!isActive ? `<button class="btn btn-icon btn-primary switch-btn" data-profile-id="${profile.id}">切换</button>` : ''}
+          <button class="btn btn-icon btn-secondary domain-detail-btn" data-profile-id="${profile.id}">域名配置</button>
+          <button class="btn btn-icon btn-secondary cookie-detail-btn" data-profile-id="${profile.id}">Cookie清单</button>
+          <button class="btn btn-icon btn-warning clear-cookies-btn" data-profile-id="${profile.id}">清除Cookie</button>
           <button class="btn btn-icon btn-danger delete-btn" data-profile-id="${profile.id}">删除</button>
         </div>
       </div>
     `;
   }).join('');
   
-  // 绑定事件
-  document.querySelectorAll('.profile-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      if (!e.target.closest('.profile-actions')) {
-        const profileId = item.dataset.profileId;
-        handleSwitchProfile(profileId);
-      }
-    });
-  });
-  
-  document.querySelectorAll('.switch-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+  // 绑定checkbox事件
+  document.querySelectorAll('.profile-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', async (e) => {
       e.stopPropagation();
-      const profileId = btn.dataset.profileId;
-      handleSwitchProfile(profileId);
+      const profileId = checkbox.dataset.profileId;
+      const isChecked = checkbox.checked;
+      
+      if (isChecked) {
+        // 选中：切换配置
+        await handleCheckboxSelect(profileId);
+      } else {
+        // 取消选中：清空所有cookie
+        await handleCheckboxDeselect();
+      }
     });
   });
   
@@ -95,20 +100,43 @@ function renderProfiles() {
     });
   });
   
-  document.querySelectorAll('.manage-domains-btn').forEach(btn => {
+  document.querySelectorAll('.domain-detail-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const profileId = btn.dataset.profileId;
       showDomainDialog(profileId);
     });
   });
+  
+  document.querySelectorAll('.cookie-detail-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const profileId = btn.dataset.profileId;
+      showCookieDialog(profileId);
+    });
+  });
+  
+  document.querySelectorAll('.clear-cookies-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const profileId = btn.dataset.profileId;
+      handleClearProfileCookies(profileId);
+    });
+  });
 }
 
 /**
- * 处理切换配置
+ * 处理checkbox选中（切换配置）
  */
-async function handleSwitchProfile(profileId) {
+async function handleCheckboxSelect(profileId) {
   try {
+    // 先取消其他所有checkbox
+    document.querySelectorAll('.profile-checkbox').forEach(cb => {
+      if (cb.dataset.profileId !== profileId) {
+        cb.checked = false;
+      }
+    });
+    
     // 发送消息给Service Worker执行切换
     const response = await chrome.runtime.sendMessage({
       action: 'switchProfile',
@@ -119,13 +147,60 @@ async function handleSwitchProfile(profileId) {
     if (response.success) {
       currentProfileId = profileId;
       await loadProfiles();
-      showMessage('配置切换成功');
+      showMessage('配置已激活');
     } else {
+      // 如果切换失败，取消选中
+      const checkbox = document.querySelector(`.profile-checkbox[data-profile-id="${profileId}"]`);
+      if (checkbox) {
+        checkbox.checked = false;
+      }
       showMessage('切换失败: ' + (response.error || '未知错误'), 'error');
     }
   } catch (error) {
     console.error('切换配置失败:', error);
+    // 如果切换失败，取消选中
+    const checkbox = document.querySelector(`.profile-checkbox[data-profile-id="${profileId}"]`);
+    if (checkbox) {
+      checkbox.checked = false;
+    }
     showMessage('切换失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 处理checkbox取消选中（清空所有cookie）
+ */
+async function handleCheckboxDeselect() {
+  if (!confirm('确定要清空所有Cookie吗？\n此操作将删除浏览器中的所有Cookie。')) {
+    // 如果用户取消，恢复checkbox状态
+    const checkbox = document.querySelector(`.profile-checkbox[data-profile-id="${currentProfileId}"]`);
+    if (checkbox) {
+      checkbox.checked = true;
+    }
+    return;
+  }
+  
+  try {
+    // 清空所有cookie
+    await clearAllCookies();
+    
+    // 清除当前激活的配置
+    currentProfileId = null;
+    
+    // 清除激活状态（直接设置storage，使用正确的key）
+    await setStorage({ activeProfileId: null }); // 注意：这里应该使用 'activeProfileId' 作为key
+    
+    await loadProfiles();
+    showMessage('已清空所有Cookie');
+  } catch (error) {
+    console.error('清空Cookie失败:', error);
+    showMessage('清空失败: ' + error.message, 'error');
+    
+    // 如果清空失败，恢复checkbox状态
+    const checkbox = document.querySelector(`.profile-checkbox[data-profile-id="${currentProfileId}"]`);
+    if (checkbox) {
+      checkbox.checked = true;
+    }
   }
 }
 
@@ -147,6 +222,49 @@ async function handleDeleteProfile(profileId) {
   } catch (error) {
     console.error('删除配置失败:', error);
     showMessage('删除失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 处理清除配置的Cookie
+ */
+async function handleClearProfileCookies(profileId) {
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) return;
+  
+  // 检查是否有Cookie数据
+  const cookiesData = await getProfileCookies(profileId);
+  const hasCookies = Object.keys(cookiesData).length > 0;
+  
+  if (!hasCookies) {
+    showMessage('该配置下没有Cookie数据', 'error');
+    return;
+  }
+  
+  // 统计Cookie数量
+  let cookieCount = 0;
+  for (const cookies of Object.values(cookiesData)) {
+    if (Array.isArray(cookies)) {
+      cookieCount += cookies.length;
+    }
+  }
+  
+  if (!confirm(`确定要清除配置"${profile.name}"下的所有Cookie吗？\n将删除 ${cookieCount} 个Cookie，此操作不可恢复。`)) {
+    return;
+  }
+  
+  try {
+    await clearProfileCookies(profileId);
+    showMessage(`已清除 ${cookieCount} 个Cookie`);
+    
+    // 如果当前正在查看该配置的Cookie详情，刷新列表
+    const cookieDialog = document.getElementById('cookieDialog');
+    if (cookieDialog.style.display !== 'none' && cookieDialog.dataset.profileId === profileId) {
+      await renderCookiesList(profileId);
+    }
+  } catch (error) {
+    console.error('清除Cookie失败:', error);
+    showMessage('清除失败: ' + error.message, 'error');
   }
 }
 
@@ -222,7 +340,7 @@ function renderDomainsList(profileId, domains) {
   const domainsList = document.getElementById('domainsList');
   
   if (domains.length === 0) {
-    domainsList.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">暂无域名</p>';
+    domainsList.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">未配置域名，将对所有域名生效</p>';
     return;
   }
   
@@ -256,9 +374,10 @@ async function handleAddDomain() {
     return;
   }
   
-  // 简单的域名验证
-  if (!/^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(domain)) {
-    showMessage('请输入有效的域名', 'error');
+  // 域名验证（支持通配符，如 *.example.com）
+  const domainPattern = /^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+  if (!domainPattern.test(domain)) {
+    showMessage('请输入有效的域名（支持通配符，如 *.example.com）', 'error');
     return;
   }
   
@@ -320,6 +439,282 @@ function hideDomainDialog() {
 }
 
 /**
+ * 显示Cookie详情对话框
+ */
+async function showCookieDialog(profileId) {
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) return;
+  
+  const dialog = document.getElementById('cookieDialog');
+  const title = document.getElementById('cookieDialogTitle');
+  
+  title.textContent = `Cookie详情 - ${profile.name}`;
+  dialog.dataset.profileId = profileId;
+  
+  await renderCookiesList(profileId);
+  
+  dialog.style.display = 'flex';
+}
+
+/**
+ * 渲染Cookie列表
+ */
+async function renderCookiesList(profileId) {
+  const cookiesList = document.getElementById('cookiesList');
+  const cookiesData = await getProfileCookies(profileId);
+  
+  if (Object.keys(cookiesData).length === 0) {
+    cookiesList.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">暂无Cookie数据</p>';
+    return;
+  }
+  
+  let html = '';
+  for (const [domain, cookies] of Object.entries(cookiesData)) {
+    if (!Array.isArray(cookies) || cookies.length === 0) continue;
+    
+    html += `<div class="cookie-domain-group">
+      <div class="cookie-domain-header">
+        <strong>${escapeHtml(domain)}</strong>
+        <button class="btn btn-icon btn-primary add-cookie-btn" data-domain="${escapeHtml(domain)}">添加Cookie</button>
+      </div>
+      <table class="cookie-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>值</th>
+            <th>路径</th>
+            <th>标志</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>`;
+    
+    for (const cookie of cookies) {
+      const flags = [];
+      if (cookie.secure) flags.push('Secure');
+      if (cookie.httpOnly) flags.push('HttpOnly');
+      
+      html += `
+        <tr class="cookie-row" data-domain="${escapeHtml(domain)}" data-name="${escapeHtml(cookie.name)}" data-path="${escapeHtml(cookie.path || '/')}">
+          <td class="cookie-name-cell">${escapeHtml(cookie.name)}</td>
+          <td class="cookie-value-cell" title="${escapeHtml(cookie.value || '')}">${escapeHtml(cookie.value || '')}</td>
+          <td class="cookie-path-cell">${escapeHtml(cookie.path || '/')}</td>
+          <td class="cookie-flags-cell">${flags.map(f => `<span class="cookie-flag">${f}</span>`).join(' ') || '-'}</td>
+          <td class="cookie-actions-cell">
+            <button class="btn btn-icon btn-secondary edit-cookie-btn">编辑</button>
+            <button class="btn btn-icon btn-danger remove-cookie-btn">删除</button>
+          </td>
+        </tr>
+      `;
+    }
+    
+    html += `</tbody></table></div>`;
+  }
+  
+  cookiesList.innerHTML = html;
+  
+  // 绑定事件
+  document.querySelectorAll('.add-cookie-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const domain = btn.dataset.domain;
+      showAddCookieDialog(profileId, domain);
+    });
+  });
+  
+  document.querySelectorAll('.edit-cookie-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.cookie-row');
+      const domain = row.dataset.domain;
+      const name = row.dataset.name;
+      const path = row.dataset.path;
+      showEditCookieDialog(profileId, domain, name, path);
+    });
+  });
+  
+  document.querySelectorAll('.remove-cookie-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.cookie-row');
+      const domain = row.dataset.domain;
+      const name = row.dataset.name;
+      const path = row.dataset.path;
+      await handleDeleteCookie(profileId, domain, name, path);
+    });
+  });
+}
+
+/**
+ * 显示添加Cookie对话框
+ */
+function showAddCookieDialog(profileId, domain) {
+  const dialog = document.getElementById('addCookieDialog');
+  dialog.dataset.profileId = profileId;
+  dialog.dataset.domain = domain;
+  document.getElementById('cookieName').value = '';
+  document.getElementById('cookieValue').value = '';
+  document.getElementById('cookiePath').value = '/';
+  document.getElementById('cookieDomain').value = domain;
+  document.getElementById('cookieSecure').checked = false;
+  document.getElementById('cookieHttpOnly').checked = false;
+  dialog.style.display = 'flex';
+}
+
+/**
+ * 显示编辑Cookie对话框
+ */
+async function showEditCookieDialog(profileId, domain, cookieName, cookiePath) {
+  const cookiesData = await getProfileCookies(profileId);
+  const cookies = cookiesData[domain] || [];
+  const cookie = cookies.find(c => c.name === cookieName && (c.path || '/') === cookiePath);
+  
+  if (!cookie) return;
+  
+  const dialog = document.getElementById('editCookieDialog');
+  dialog.dataset.profileId = profileId;
+  dialog.dataset.domain = domain;
+  dialog.dataset.cookieName = cookieName;
+  dialog.dataset.cookiePath = cookiePath;
+  
+  document.getElementById('editCookieName').value = cookie.name;
+  document.getElementById('editCookieValue').value = cookie.value || '';
+  document.getElementById('editCookiePath').value = cookie.path || '/';
+  document.getElementById('editCookieDomain').value = cookie.domain || domain;
+  document.getElementById('editCookieSecure').checked = cookie.secure || false;
+  document.getElementById('editCookieHttpOnly').checked = cookie.httpOnly || false;
+  
+  dialog.style.display = 'flex';
+}
+
+/**
+ * 处理添加Cookie
+ */
+async function handleAddCookie() {
+  const dialog = document.getElementById('addCookieDialog');
+  const profileId = dialog.dataset.profileId;
+  const domain = dialog.dataset.domain;
+  
+  const name = document.getElementById('cookieName').value.trim();
+  const value = document.getElementById('cookieValue').value;
+  const path = document.getElementById('cookiePath').value.trim() || '/';
+  const cookieDomain = document.getElementById('cookieDomain').value.trim() || domain;
+  const secure = document.getElementById('cookieSecure').checked;
+  const httpOnly = document.getElementById('cookieHttpOnly').checked;
+  
+  if (!name) {
+    showMessage('请输入Cookie名称', 'error');
+    return;
+  }
+  
+  try {
+    await addCookie(profileId, domain, {
+      name,
+      value,
+      path,
+      domain: cookieDomain,
+      secure,
+      httpOnly
+    });
+    
+    await renderCookiesList(profileId);
+    hideAddCookieDialog();
+    showMessage('Cookie添加成功');
+  } catch (error) {
+    console.error('添加Cookie失败:', error);
+    showMessage('添加失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 处理编辑Cookie
+ */
+async function handleEditCookie() {
+  const dialog = document.getElementById('editCookieDialog');
+  const profileId = dialog.dataset.profileId;
+  const domain = dialog.dataset.domain;
+  const oldName = dialog.dataset.cookieName;
+  const oldPath = dialog.dataset.cookiePath;
+  
+  const name = document.getElementById('editCookieName').value.trim();
+  const value = document.getElementById('editCookieValue').value;
+  const path = document.getElementById('editCookiePath').value.trim() || '/';
+  const cookieDomain = document.getElementById('editCookieDomain').value.trim() || domain;
+  const secure = document.getElementById('editCookieSecure').checked;
+  const httpOnly = document.getElementById('editCookieHttpOnly').checked;
+  
+  if (!name) {
+    showMessage('请输入Cookie名称', 'error');
+    return;
+  }
+  
+  try {
+    // 如果名称或路径改变了，需要先删除旧的，再添加新的
+    if (name !== oldName || path !== oldPath) {
+      await deleteCookie(profileId, domain, oldName, oldPath);
+      await addCookie(profileId, domain, {
+        name,
+        value,
+        path,
+        domain: cookieDomain,
+        secure,
+        httpOnly
+      });
+    } else {
+      await updateCookie(profileId, domain, name, path, {
+        value,
+        domain: cookieDomain,
+        secure,
+        httpOnly
+      });
+    }
+    
+    await renderCookiesList(profileId);
+    hideEditCookieDialog();
+    showMessage('Cookie更新成功');
+  } catch (error) {
+    console.error('更新Cookie失败:', error);
+    showMessage('更新失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 处理删除Cookie
+ */
+async function handleDeleteCookie(profileId, domain, cookieName, cookiePath) {
+  if (!confirm(`确定要删除Cookie "${cookieName}" 吗？`)) {
+    return;
+  }
+  
+  try {
+    await deleteCookie(profileId, domain, cookieName, cookiePath);
+    await renderCookiesList(profileId);
+    showMessage('Cookie已删除');
+  } catch (error) {
+    console.error('删除Cookie失败:', error);
+    showMessage('删除失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 隐藏Cookie详情对话框
+ */
+function hideCookieDialog() {
+  document.getElementById('cookieDialog').style.display = 'none';
+}
+
+/**
+ * 隐藏添加Cookie对话框
+ */
+function hideAddCookieDialog() {
+  document.getElementById('addCookieDialog').style.display = 'none';
+}
+
+/**
+ * 隐藏编辑Cookie对话框
+ */
+function hideEditCookieDialog() {
+  document.getElementById('editCookieDialog').style.display = 'none';
+}
+
+/**
  * 更新插件启用状态
  */
 async function updatePluginToggle() {
@@ -370,6 +765,17 @@ function setupEventListeners() {
     }
   });
   
+  // Cookie详情对话框
+  document.getElementById('closeCookieDialogBtn').addEventListener('click', hideCookieDialog);
+  
+  // 添加Cookie对话框
+  document.getElementById('confirmAddCookieBtn').addEventListener('click', handleAddCookie);
+  document.getElementById('cancelAddCookieBtn').addEventListener('click', hideAddCookieDialog);
+  
+  // 编辑Cookie对话框
+  document.getElementById('confirmEditCookieBtn').addEventListener('click', handleEditCookie);
+  document.getElementById('cancelEditCookieBtn').addEventListener('click', hideEditCookieDialog);
+  
   // 插件启用/禁用切换
   document.getElementById('pluginToggle').addEventListener('change', handlePluginToggle);
   
@@ -383,6 +789,24 @@ function setupEventListeners() {
   document.getElementById('domainDialog').addEventListener('click', (e) => {
     if (e.target.id === 'domainDialog') {
       hideDomainDialog();
+    }
+  });
+  
+  document.getElementById('cookieDialog').addEventListener('click', (e) => {
+    if (e.target.id === 'cookieDialog') {
+      hideCookieDialog();
+    }
+  });
+  
+  document.getElementById('addCookieDialog').addEventListener('click', (e) => {
+    if (e.target.id === 'addCookieDialog') {
+      hideAddCookieDialog();
+    }
+  });
+  
+  document.getElementById('editCookieDialog').addEventListener('click', (e) => {
+    if (e.target.id === 'editCookieDialog') {
+      hideEditCookieDialog();
     }
   });
 }
